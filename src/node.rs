@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
-use std::io::read_to_string;
 
 #[derive(Debug)]
 pub enum NodeRole {
@@ -69,6 +68,10 @@ impl RaftNode {
 
         if let Err(e) = node.load_state() {
             eprintln!("Warning: Could not load node state: {}", e);
+        }
+
+        if let Err(e) = node.save_state() {
+            eprintln!("Warning: Could not save node state: {}", e);
         }
 
         node
@@ -232,5 +235,11 @@ impl RaftNode {
         self.log = state.log;
 
         Ok(())
+    }
+
+    pub fn print_state(&self) {
+        println!("Current term: {}", self.current_term);
+        println!("Voted for: {:?}", self.voted_for);
+        println!("Log entries: {}", self.log.len());
     }
 }
