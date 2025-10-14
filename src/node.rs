@@ -1,4 +1,8 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use std::io;
+use std::io::read_to_string;
 
 #[derive(Debug)]
 pub enum NodeRole {
@@ -13,7 +17,7 @@ pub struct LeaderState {
     match_index: Vec<usize>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     term: u64,
     command: String,
@@ -40,9 +44,16 @@ pub struct RaftNode {
     leader_state: Option<LeaderState>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct PersistentState {
+    current_term: u64,
+    voted_for: Option<String>,
+    log: Vec<LogEntry>,
+}
+
 impl RaftNode {
     pub fn new(id: String, port: u16, peers: Vec<(String, u16)>) -> Self {
-        RaftNode {
+        let mut node = RaftNode {
             id,
             port,
             peers,
@@ -54,7 +65,13 @@ impl RaftNode {
             last_applied: 0,
             kv_store: HashMap::new(),
             leader_state: None,
+        };
+
+        if let Err(e) = node.load_state() {
+            eprintln!("Warning: Could not load node state: {}", e);
         }
+
+        node
     }
 
     pub fn id(&self) -> &String {
@@ -64,7 +81,11 @@ impl RaftNode {
     fn become_candidate(&mut self) {
         self.role = NodeRole::Candidate;
         self.current_term += 1;
-        self.voted_for = Some(self.id.clone())
+        self.voted_for = Some(self.id.clone());
+
+        if let Err(e) = self.save_state() {
+            eprintln!("Warning: Could not save node state: {}", e);
+        }
     }
 
     fn become_leader(&mut self) {
@@ -80,6 +101,10 @@ impl RaftNode {
         self.current_term = new_term;
         self.voted_for = None;
         self.leader_state = None;
+
+        if let Err(e) = self.save_state() {
+            eprintln!("Warning: Could not save node state: {}", e);
+        }
     }
 
     fn handle_vote_request(
@@ -118,6 +143,11 @@ impl RaftNode {
 
         // grant vote
         self.voted_for = Some(candidate_id);
+
+        if let Err(e) = self.save_state() {
+            eprintln!("Warning: Could not save node state: {}", e);
+        }
+
         true
     }
 
@@ -166,6 +196,41 @@ impl RaftNode {
             self.commit_index = leader_commit_index.min(self.log.len());
         }
 
+        if let Err(e) = self.save_state() {
+            eprintln!("Warning: Could not save node state: {}", e);
+        }
+
         true
+    }
+
+    fn save_state(&self) -> io::Result<()> {
+        let state = PersistentState {
+            current_term: self.current_term,
+            voted_for: self.voted_for.clone(),
+            log: self.log.clone(),
+        };
+        let json = serde_json::to_string_pretty(&state)?;
+        let filename = format!("raft_state_{}.json", self.id);
+        fs::write(filename, json)?;
+        Ok(())
+    }
+
+    fn load_state(&mut self) -> io::Result<()> {
+        let filename = format!("raft_state_{}.json", self.id);
+
+        if !std::path::Path::new(&filename).exists() {
+            // first startup, nothing to load
+            return Ok(());
+        }
+
+        let json = fs::read_to_string(&filename)?;
+
+        let state: PersistentState = serde_json::from_str(&json)?;
+
+        self.current_term = state.current_term;
+        self.voted_for = state.voted_for;
+        self.log = state.log;
+
+        Ok(())
     }
 }
