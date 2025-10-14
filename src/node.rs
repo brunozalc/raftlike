@@ -213,13 +213,17 @@ impl RaftNode {
             log: self.log.clone(),
         };
         let json = serde_json::to_string_pretty(&state)?;
-        let filename = format!("raft_state_{}.json", self.id);
+
+        // create states folder at root if non-existent
+        fs::create_dir_all("./states")?;
+
+        let filename = format!("./states/raft_state_{}.json", self.id);
         fs::write(filename, json)?;
         Ok(())
     }
 
     fn load_state(&mut self) -> io::Result<()> {
-        let filename = format!("raft_state_{}.json", self.id);
+        let filename = format!("./states/raft_state_{}.json", self.id);
 
         if !std::path::Path::new(&filename).exists() {
             // first startup, nothing to load
