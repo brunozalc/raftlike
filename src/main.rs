@@ -10,5 +10,5 @@ fn main() {
     let mut raft_node = RaftNode::new("A".to_string(), 8080, peers);
 
     println!("Node started. ID: {}", raft_node.id());
-    println!("Run this program multiple times - state should persist!");
+    raft_node.print_state();
 }
