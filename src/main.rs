@@ -34,7 +34,7 @@ async fn main() {
     println!("  Port: {}", port);
     println!("  Peers: {:?}", peers);
 
-    let raft_node = RaftNode::new(id, port, peers); // creates the actual raft node
+    let raft_node = RaftNode::new(id, peers); // creates the actual raft node
     let shared_node = Arc::new(Mutex::new(raft_node)); // creates an arc pointer to the node data
 
     let node_for_election = shared_node.clone(); // arc pointer copy dedicated to the election

@@ -27,7 +27,6 @@ pub struct LogEntry {
 pub struct RaftNode {
     // identity
     id: String,
-    port: u16,
     peers: Vec<(String, u16)>,
 
     // raft state
@@ -55,10 +54,9 @@ struct PersistentState {
 }
 
 impl RaftNode {
-    pub fn new(id: String, port: u16, peers: Vec<(String, u16)>) -> Self {
+    pub fn new(id: String, peers: Vec<(String, u16)>) -> Self {
         let mut node = RaftNode {
             id,
-            port,
             peers,
             role: NodeRole::Follower,
             current_term: 0,
@@ -228,7 +226,7 @@ impl RaftNode {
 
     pub fn handle_append_entries(
         &mut self,
-        leader_id: String,
+        _leader_id: String,
         leader_term: u64,
         prev_log_idx: usize,
         prev_log_term: u64,

@@ -1,5 +1,4 @@
 use crate::api::{AppendRequest, AppendResponse, VoteRequest, VoteResponse};
-use crate::node::RaftNode;
 
 pub async fn send_vote_request(
     peer_host: &str,

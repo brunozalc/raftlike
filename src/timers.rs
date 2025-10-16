@@ -29,7 +29,7 @@ pub async fn election_loop(node: Arc<Mutex<RaftNode>>) {
             let peers = raft.get_peers().clone();
             let vote_request = raft.get_vote_request();
             let current_term = raft.current_term();
-            let node_id = raft.id().clone();
+            let _node_id = raft.id().clone();
 
             drop(raft); // release lock before network calls
 
