@@ -32,6 +32,7 @@ pub struct AppendRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AppendResponse {
     pub term: u64,
+    pub log_len: usize,
     pub success: bool,
 }
 
