@@ -68,3 +68,9 @@ pub struct MetricsResponse {
     pub commit_index: usize,
     pub election_count: u64,
 }
+
+#[derive(Debug, Serialize)]
+pub struct RedirectResponse {
+    pub leader_url: String,
+    pub message: String,
+}
