@@ -35,9 +35,10 @@ pub struct RaftNode {
     log: Vec<LogEntry>,
 
     // volatile state (all nodes)
-    commit_index: usize,
-    last_applied: usize,
+    commit_index: usize, // index of highest log entry known to be committed
+    last_applied: usize, // index of highest log entry applied to state machine
     kv_store: HashMap<String, String>,
+    election_count: u64,
 
     // leader state
     leader_state: Option<LeaderState>,
@@ -63,6 +64,7 @@ impl RaftNode {
             commit_index: 0,
             last_applied: 0,
             kv_store: HashMap::new(),
+            election_count: 0,
             leader_state: None,
         };
 
@@ -81,17 +83,54 @@ impl RaftNode {
         &self.id
     }
 
-    fn become_candidate(&mut self) {
+    pub fn role(&self) -> &NodeRole {
+        &self.role
+    }
+
+    pub fn is_leader(&self) -> bool {
+        matches!(self.role, NodeRole::Leader)
+    }
+
+    pub fn current_term(&self) -> u64 {
+        self.current_term
+    }
+
+    pub fn commit_index(&self) -> usize {
+        self.commit_index
+    }
+
+    pub fn election_count(&self) -> u64 {
+        self.election_count
+    }
+
+    pub fn get_value(&self, key: &str) -> Option<String> {
+        self.kv_store.get(key).cloned()
+    }
+
+    pub fn log_len(&self) -> usize {
+        self.log.len()
+    }
+
+    pub fn last_applied(&self) -> usize {
+        self.last_applied
+    }
+
+    pub fn log_debug(&self) -> String {
+        format!("{:?}", self.log)
+    }
+
+    pub fn become_candidate(&mut self) {
         self.role = NodeRole::Candidate;
         self.current_term += 1;
         self.voted_for = Some(self.id.clone());
+        self.election_count += 1;
 
         if let Err(e) = self.save_state() {
             eprintln!("Warning: Could not save node state: {}", e);
         }
     }
 
-    fn become_leader(&mut self) {
+    pub fn become_leader(&mut self) {
         self.role = NodeRole::Leader;
         self.leader_state = Some(LeaderState {
             next_index: vec![self.log.len(); self.peers.len()],
@@ -99,7 +138,7 @@ impl RaftNode {
         });
     }
 
-    fn become_follower(&mut self, new_term: u64) {
+    pub fn become_follower(&mut self, new_term: u64) {
         self.role = NodeRole::Follower;
         self.current_term = new_term;
         self.voted_for = None;
@@ -110,7 +149,7 @@ impl RaftNode {
         }
     }
 
-    fn handle_vote_request(
+    pub fn handle_vote_request(
         &mut self,
         candidate_id: String,
         candidate_term: u64,
@@ -154,7 +193,7 @@ impl RaftNode {
         true
     }
 
-    fn handle_append_entries(
+    pub fn handle_append_entries(
         &mut self,
         leader_id: String,
         leader_term: u64,
@@ -206,6 +245,28 @@ impl RaftNode {
         true
     }
 
+    pub fn append_to_log(&mut self, command: String) {
+        let entry = LogEntry {
+            term: self.current_term,
+            command,
+        };
+        self.log.push(entry);
+        let _ = self.save_state();
+    }
+
+    pub fn apply_committed_entries(&mut self) {
+        while self.last_applied < self.commit_index {
+            if let Some(entry) = self.log.get(self.last_applied) {
+                if let Some(kv) = entry.command.strip_prefix("set ") {
+                    if let Some((key, value)) = kv.split_once('=') {
+                        self.kv_store.insert(key.to_string(), value.to_string());
+                    }
+                }
+            }
+            self.last_applied += 1;
+        }
+    }
+
     fn save_state(&self) -> io::Result<()> {
         let state = PersistentState {
             current_term: self.current_term,
@@ -241,9 +302,17 @@ impl RaftNode {
         Ok(())
     }
 
-    pub fn print_state(&self) {
-        println!("Current term: {}", self.current_term);
-        println!("Voted for: {:?}", self.voted_for);
-        println!("Log entries: {}", self.log.len());
+    pub fn force_become_leader(&mut self) {
+        self.become_leader();
+    }
+
+    pub fn test_commit_all(&mut self) -> Result<usize, String> {
+        if !self.is_leader() {
+            return Err("Only leaders can commit entries".to_string());
+        }
+
+        self.commit_index = self.log.len();
+        self.apply_committed_entries();
+        Ok(self.commit_index)
     }
 }
