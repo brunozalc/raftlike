@@ -1,7 +1,9 @@
+use crate::api;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 pub enum NodeRole {
@@ -39,6 +41,7 @@ pub struct RaftNode {
     last_applied: usize, // index of highest log entry applied to state machine
     kv_store: HashMap<String, String>,
     election_count: u64,
+    last_heartbeat: Instant,
 
     // leader state
     leader_state: Option<LeaderState>,
@@ -65,6 +68,7 @@ impl RaftNode {
             last_applied: 0,
             kv_store: HashMap::new(),
             election_count: 0,
+            last_heartbeat: Instant::now(),
             leader_state: None,
         };
 
@@ -91,6 +95,10 @@ impl RaftNode {
         matches!(self.role, NodeRole::Leader)
     }
 
+    pub fn get_peers(&self) -> &Vec<(String, u16)> {
+        &self.peers
+    }
+
     pub fn current_term(&self) -> u64 {
         self.current_term
     }
@@ -107,6 +115,23 @@ impl RaftNode {
         self.kv_store.get(key).cloned()
     }
 
+    pub fn get_vote_request(&self) -> api::VoteRequest {
+        let (last_log_index, last_log_term) = if self.log.is_empty() {
+            (0, 0)
+        } else {
+            let idx = self.log.len() - 1;
+            let term = self.log.last().map(|e| e.term).unwrap_or(0);
+            (idx, term)
+        };
+
+        api::VoteRequest {
+            candidate_id: self.id.clone(),
+            candidate_term: self.current_term,
+            last_log_index,
+            last_log_term,
+        }
+    }
+
     pub fn log_len(&self) -> usize {
         self.log.len()
     }
@@ -117,6 +142,14 @@ impl RaftNode {
 
     pub fn log_debug(&self) -> String {
         format!("{:?}", self.log)
+    }
+
+    pub fn reset_election_timer(&mut self) {
+        self.last_heartbeat = Instant::now();
+    }
+
+    pub fn election_timeout_elapsed(&self) -> bool {
+        self.last_heartbeat.elapsed() > Duration::from_millis(400)
     }
 
     pub fn become_candidate(&mut self) {
@@ -207,6 +240,7 @@ impl RaftNode {
             return false;
         } else {
             self.become_follower(leader_term);
+            self.reset_election_timer();
         }
 
         // verify prev_log_idx and prev_log_term
@@ -245,15 +279,6 @@ impl RaftNode {
         true
     }
 
-    pub fn append_to_log(&mut self, command: String) {
-        let entry = LogEntry {
-            term: self.current_term,
-            command,
-        };
-        self.log.push(entry);
-        let _ = self.save_state();
-    }
-
     pub fn apply_committed_entries(&mut self) {
         while self.last_applied < self.commit_index {
             if let Some(entry) = self.log.get(self.last_applied) {
@@ -265,6 +290,38 @@ impl RaftNode {
             }
             self.last_applied += 1;
         }
+    }
+
+    pub fn get_append_entries_request(&self) -> api::AppendRequest {
+        let prev_log_index = if self.log.is_empty() {
+            0
+        } else {
+            self.log.len() - 1
+        };
+
+        let prev_log_term = if prev_log_index > 0 {
+            self.log.get(prev_log_index).map(|e| e.term).unwrap_or(0)
+        } else {
+            0
+        };
+
+        api::AppendRequest {
+            leader_id: self.id.clone(),
+            term: self.current_term,
+            prev_log_index,
+            prev_log_term,
+            entries: vec![],
+            leader_commit: self.commit_index,
+        }
+    }
+
+    pub fn append_to_log(&mut self, command: String) {
+        let entry = LogEntry {
+            term: self.current_term,
+            command,
+        };
+        self.log.push(entry);
+        let _ = self.save_state();
     }
 
     fn save_state(&self) -> io::Result<()> {
