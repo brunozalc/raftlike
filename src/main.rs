@@ -7,6 +7,8 @@ mod timers;
 use axum::{
     Json, Router,
     extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
     routing::{get, post},
 };
 
@@ -51,7 +53,8 @@ async fn main() {
     let app = Router::new()
         .route("/vote", post(handle_vote))
         .route("/append", post(handle_append))
-        .route("/kv", post(handle_kv_write).get(handle_kv_read))
+        .route("/kv", post(handle_kv_write))
+        .route("/kv", get(handle_kv_read))
         .route("/metrics", get(handle_metrics))
         // ============= test endpoints =============
         .route("/test/become-leader", post(handle_test_become_leader))
@@ -111,16 +114,25 @@ async fn handle_append(
 async fn handle_kv_write(
     State(node): State<Arc<Mutex<RaftNode>>>,
     Json(req): Json<api::KVWriteRequest>,
-) -> Json<api::KVWriteResponse> {
-    let mut raft = node.lock().unwrap();
+) -> impl IntoResponse {
+    let is_leader = {
+        let raft = node.lock().unwrap();
+        raft.is_leader()
+    }; // lock is dropped here
 
-    if !raft.is_leader() {
-        return Json(api::KVWriteResponse {
-            success: false,
-            error: Some("Not the leader".to_string()),
-        });
+    if !is_leader {
+        let leader_url = find_current_leader().await; // now we can await safely
+        return (
+            StatusCode::TEMPORARY_REDIRECT,
+            Json(api::RedirectResponse {
+                leader_url,
+                message: "Redirecting to leader".to_string(),
+            }),
+        )
+            .into_response();
     }
 
+    let mut raft = node.lock().unwrap();
     let command = format!("set {}={}", req.key, req.value);
     raft.append_to_log(command);
 
@@ -128,6 +140,7 @@ async fn handle_kv_write(
         success: true,
         error: None,
     })
+    .into_response()
 }
 
 async fn handle_kv_read(
@@ -180,4 +193,30 @@ async fn handle_test_debug(State(node): State<Arc<Mutex<RaftNode>>>) -> String {
         raft.last_applied(),
         raft.log_debug()
     )
+}
+
+async fn find_current_leader() -> String {
+    let nodes = [
+        "http://localhost:8080",
+        "http://localhost:8081",
+        "http://localhost:8082",
+    ];
+
+    let client = reqwest::Client::new();
+
+    for node in nodes {
+        let url = format!("{}/metrics", node);
+
+        if let Ok(response) = client.get(url).send().await {
+            if let Ok(json) = response.json::<serde_json::Value>().await {
+                if let Some(state) = json.get("state") {
+                    if state == "Leader" {
+                        return node.to_string();
+                    }
+                }
+            }
+        }
+    }
+
+    "http://localhost:8080".to_string()
 }
