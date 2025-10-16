@@ -25,9 +25,9 @@ struct KvQuery {
 async fn main() {
     let args = Args::parse();
 
-    let peers = args.parse_peers();
-    let port = args.port;
     let id = args.id.clone();
+    let port = args.port;
+    let peers = args.parse_peers();
 
     println!("Starting raft node:");
     println!("  ID: {}", id);
