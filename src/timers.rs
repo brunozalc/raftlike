@@ -84,7 +84,7 @@ pub async fn heartbeat_loop(node: Arc<Mutex<RaftNode>>) {
     loop {
         sleep(Duration::from_millis(100)).await;
 
-        let (is_leader, peers, request) = {
+        let (_is_leader, peers) = {
             let raft = node.lock().unwrap();
 
             if !raft.is_leader() {
@@ -93,30 +93,35 @@ pub async fn heartbeat_loop(node: Arc<Mutex<RaftNode>>) {
             }
 
             let peers = raft.get_peers().clone();
-            let request = raft.get_append_entries_request();
+            (true, peers)
+        };
 
-            (true, peers, request)
-        }; // lock released here
+        println!("[HEARTBEAT] Sending to {} peers...", peers.len());
 
-        println!(
-            "[HEARTBEAT] Sending heartbeats to {} followers...",
-            peers.len()
-        );
+        for (peer_idx, (host, port)) in peers.iter().enumerate() {
+            let request = {
+                let raft = node.lock().unwrap();
+                raft.get_append_entries_for_peer(peer_idx)
+            };
 
-        for (host, port) in peers {
-            let req = request.clone();
+            let host = host.clone();
+            let port = *port;
+            let node_clone = node.clone();
 
-            // spawn a task for each peer (send in parallel)
+            // spawn a task per peer (send in parallel)
             tokio::spawn(async move {
-                match network::send_append_entries(&host, port, req).await {
+                match network::send_append_entries(&host, port, request).await {
                     Ok(response) => {
                         println!(
-                            "[HEARTBEAT] Peer {}:{} responded: success={}",
-                            host, port, response.success
+                            "[HEARTBEAT] {}:{} success={} log_len={}",
+                            host, port, response.success, response.log_len
                         );
+
+                        let mut raft = node_clone.lock().unwrap();
+                        raft.handle_append_response(peer_idx, response.success, response.log_len);
                     }
                     Err(e) => {
-                        println!("[HEARTBEAT] Failed to reach {}:{} - {}", host, port, e);
+                        println!("[HEARTBEAT] {}:{} failed: {}", host, port, e);
                     }
                 }
             });
