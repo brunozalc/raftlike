@@ -1,4 +1,5 @@
 mod api;
+mod cli;
 mod network;
 mod node;
 mod timers;
@@ -9,6 +10,8 @@ use axum::{
     routing::{get, post},
 };
 
+use clap::Parser;
+use cli::Args;
 use node::RaftNode;
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
@@ -20,12 +23,18 @@ struct KvQuery {
 
 #[tokio::main]
 async fn main() {
-    let peers = vec![
-        ("localhost".to_string(), 5001),
-        ("localhost".to_string(), 5002),
-    ];
-    let raft_node = RaftNode::new("A".to_string(), 5000, peers); // creates the actual raft node
+    let args = Args::parse();
 
+    let peers = args.parse_peers();
+    let port = args.port;
+    let id = args.id.clone();
+
+    println!("Starting raft node:");
+    println!("  ID: {}", id);
+    println!("  Port: {}", port);
+    println!("  Peers: {:?}", peers);
+
+    let raft_node = RaftNode::new(id, port, peers); // creates the actual raft node
     let shared_node = Arc::new(Mutex::new(raft_node)); // creates an arc pointer to the node data
 
     let node_for_election = shared_node.clone(); // arc pointer copy dedicated to the election
@@ -51,7 +60,7 @@ async fn main() {
         // ==========================================
         .with_state(shared_node.clone());
 
-    let addr = "0.0.0.0:8080";
+    let addr = format!("0.0.0.0:{}", port);
     println!("Raft node listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -94,6 +103,7 @@ async fn handle_append(
 
     Json(api::AppendResponse {
         term: raft.current_term(),
+        log_len: raft.log_len(),
         success,
     })
 }
