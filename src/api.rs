@@ -2,7 +2,7 @@ use crate::node::LogEntry;
 use serde::{Deserialize, Serialize};
 
 // POST /vote (request)
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VoteRequest {
     pub candidate_id: String,
     pub candidate_term: u64,
@@ -11,14 +11,14 @@ pub struct VoteRequest {
 }
 
 // POST /vote (response)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct VoteResponse {
     pub term: u64,
     pub vote_granted: bool,
 }
 
 // POST /append (request)
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppendRequest {
     pub leader_id: String,
     pub term: u64,
@@ -29,7 +29,7 @@ pub struct AppendRequest {
 }
 
 // POST /append (response)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AppendResponse {
     pub term: u64,
     pub success: bool,
