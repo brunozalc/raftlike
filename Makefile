@@ -1,4 +1,4 @@
-.PHONY: help build launch stop clean clean-all status logs test
+.PHONY: help build launch stop clean clean-all status logs alive
 
 # default target - show help
 help:
@@ -11,7 +11,7 @@ help:
 	@echo "  make clean-all   - remove logs, state, and build artifacts"
 	@echo "  make status      - check status of all nodes"
 	@echo "  make logs        - tail all node logs (ctrl+c to exit)"
-	@echo "  make test        - run basic functionality tests"
+	@echo "  make alive       - check if nodes are alive"
 	@echo ""
 
 # build the project
@@ -67,7 +67,7 @@ logs:
 	@tail -f node_a.log node_b.log node_c.log 2>/dev/null || echo "No log files found. Run 'make launch' first."
 
 # basic functionality test
-test:
+alive:
 	@echo "Running basic tests..."
 	@echo ""
 	@echo "1. Checking if cluster is running..."
