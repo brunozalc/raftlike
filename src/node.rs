@@ -270,6 +270,7 @@ impl RaftNode {
         // update commit_index
         if leader_commit_index > self.commit_index {
             self.commit_index = leader_commit_index.min(self.log.len());
+            self.apply_committed_entries();
         }
 
         if let Err(e) = self.save_state() {
@@ -277,6 +278,24 @@ impl RaftNode {
         }
 
         true
+    }
+
+    pub fn handle_append_response(
+        &mut self,
+        peer_idx: usize,
+        success: bool,
+        follower_log_len: usize,
+    ) {
+        if let Some(ref mut leader_state) = self.leader_state {
+            if success {
+                leader_state.match_index[peer_idx] = follower_log_len.saturating_sub(1);
+                leader_state.next_index[peer_idx] = follower_log_len;
+            } else {
+                if leader_state.next_index[peer_idx] > 0 {
+                    leader_state.next_index[peer_idx] -= 1;
+                }
+            }
+        }
     }
 
     pub fn apply_committed_entries(&mut self) {
@@ -292,25 +311,35 @@ impl RaftNode {
         }
     }
 
-    pub fn get_append_entries_request(&self) -> api::AppendRequest {
-        let prev_log_index = if self.log.is_empty() {
-            0
+    pub fn get_append_entries_for_peer(&self, peer_idx: usize) -> api::AppendRequest {
+        let next_idx = if let Some(ref leader_state) = self.leader_state {
+            leader_state.next_index[peer_idx]
         } else {
-            self.log.len() - 1
+            self.log.len()
         };
 
-        let prev_log_term = if prev_log_index > 0 {
-            self.log.get(prev_log_index).map(|e| e.term).unwrap_or(0)
+        let prev_log_index = if next_idx > 0 { next_idx - 1 } else { 0 };
+
+        let prev_log_term = if prev_log_index > 0 && prev_log_index <= self.log.len() {
+            self.log
+                .get(prev_log_index - 1)
+                .map(|e| e.term)
+                .unwrap_or(0)
         } else {
             0
         };
+
+        let entries: Vec<LogEntry> = self.log[next_idx.min(self.log.len())..]
+            .iter()
+            .cloned()
+            .collect();
 
         api::AppendRequest {
             leader_id: self.id.clone(),
             term: self.current_term,
             prev_log_index,
             prev_log_term,
-            entries: vec![],
+            entries,
             leader_commit: self.commit_index,
         }
     }
