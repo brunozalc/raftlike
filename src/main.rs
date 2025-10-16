@@ -1,4 +1,5 @@
 mod api;
+mod network;
 mod node;
 mod timers;
 
@@ -23,9 +24,20 @@ async fn main() {
         ("localhost".to_string(), 5001),
         ("localhost".to_string(), 5002),
     ];
-    let raft_node = RaftNode::new("A".to_string(), 5000, peers);
+    let raft_node = RaftNode::new("A".to_string(), 5000, peers); // creates the actual raft node
 
-    let shared_node = Arc::new(Mutex::new(raft_node));
+    let shared_node = Arc::new(Mutex::new(raft_node)); // creates an arc pointer to the node data
+
+    let node_for_election = shared_node.clone(); // arc pointer copy dedicated to the election
+    let node_for_heartbeat = shared_node.clone(); // arc pointer copy dedicated to the heartbeat
+
+    tokio::spawn(async move {
+        timers::election_loop(node_for_election).await;
+    }); // spawn an election thread with the repective election arc pointer
+
+    tokio::spawn(async move {
+        timers::heartbeat_loop(node_for_heartbeat).await;
+    }); // spawn a heartbeat thread with the respective heartbeat arc pointer
 
     let app = Router::new()
         .route("/vote", post(handle_vote))
