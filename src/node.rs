@@ -286,8 +286,10 @@ impl RaftNode {
     ) {
         if let Some(ref mut leader_state) = self.leader_state {
             if success {
-                leader_state.match_index[peer_idx] = follower_log_len.saturating_sub(1);
+                leader_state.match_index[peer_idx] = follower_log_len;
                 leader_state.next_index[peer_idx] = follower_log_len;
+
+                self.try_advance_commit_index();
             } else {
                 if leader_state.next_index[peer_idx] > 0 {
                     leader_state.next_index[peer_idx] -= 1;
@@ -349,6 +351,48 @@ impl RaftNode {
         };
         self.log.push(entry);
         let _ = self.save_state();
+    }
+
+    pub fn try_advance_commit_index(&mut self) {
+        if !self.is_leader() {
+            return;
+        }
+
+        let leader_state = match &self.leader_state {
+            Some(state) => state,
+            None => return,
+        };
+
+        let mut new_commit_index = self.commit_index;
+
+        for n in (self.commit_index + 1)..=self.log.len() {
+            let mut count = 1;
+
+            for (i, match_idx) in leader_state.match_index.iter().enumerate() {
+                if *match_idx >= n {
+                    count += 1;
+                }
+            }
+
+            let majority = (self.peers.len() + 1) / 2 + 1;
+
+            if count >= majority {
+                if let Some(entry) = self.log.get(n - 1) {
+                    if entry.term == self.current_term {
+                        new_commit_index = n;
+                        println!(
+                            "[COMMIT] Advanced commit_index to {} (majority confirmed)",
+                            n
+                        );
+                    }
+                }
+            }
+        }
+
+        if new_commit_index > self.commit_index {
+            self.commit_index = new_commit_index;
+            self.apply_committed_entries();
+        }
     }
 
     fn save_state(&self) -> io::Result<()> {
