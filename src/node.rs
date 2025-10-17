@@ -134,14 +134,6 @@ impl RaftNode {
         self.log.len()
     }
 
-    pub fn last_applied(&self) -> usize {
-        self.last_applied
-    }
-
-    pub fn log_debug(&self) -> String {
-        format!("{:?}", self.log)
-    }
-
     pub fn reset_election_timer(&mut self) {
         self.last_heartbeat = Instant::now();
     }
@@ -368,7 +360,7 @@ impl RaftNode {
         for n in (self.commit_index + 1)..=self.log.len() {
             let mut count = 1;
 
-            for (i, match_idx) in leader_state.match_index.iter().enumerate() {
+            for (_i, match_idx) in leader_state.match_index.iter().enumerate() {
                 if *match_idx >= n {
                     count += 1;
                 }
@@ -428,19 +420,5 @@ impl RaftNode {
         self.log = state.log;
 
         Ok(())
-    }
-
-    pub fn force_become_leader(&mut self) {
-        self.become_leader();
-    }
-
-    pub fn test_commit_all(&mut self) -> Result<usize, String> {
-        if !self.is_leader() {
-            return Err("Only leaders can commit entries".to_string());
-        }
-
-        self.commit_index = self.log.len();
-        self.apply_committed_entries();
-        Ok(self.commit_index)
     }
 }
