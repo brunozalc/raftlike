@@ -56,11 +56,6 @@ async fn main() {
         .route("/kv", post(handle_kv_write))
         .route("/kv", get(handle_kv_read))
         .route("/metrics", get(handle_metrics))
-        // ============= test endpoints =============
-        .route("/test/become-leader", post(handle_test_become_leader))
-        .route("/test/commit-all", post(handle_test_commit_all))
-        .route("/test/debug", get(handle_test_debug))
-        // ==========================================
         .with_state(shared_node.clone());
 
     let addr = format!("0.0.0.0:{}", port);
@@ -165,34 +160,6 @@ async fn handle_metrics(State(node): State<Arc<Mutex<RaftNode>>>) -> Json<api::M
     };
 
     Json(response)
-}
-
-async fn handle_test_become_leader(State(node): State<Arc<Mutex<RaftNode>>>) -> &'static str {
-    let mut raft = node.lock().unwrap();
-    raft.force_become_leader();
-    "Now leader"
-}
-
-async fn handle_test_commit_all(State(node): State<Arc<Mutex<RaftNode>>>) -> String {
-    let mut raft = node.lock().unwrap();
-
-    match raft.test_commit_all() {
-        Ok(count) => format!("Committed {} entries", count),
-        Err(e) => format!("Error: {}", e),
-    }
-}
-
-async fn handle_test_debug(State(node): State<Arc<Mutex<RaftNode>>>) -> String {
-    let raft = node.lock().unwrap();
-    format!(
-        "Role: {:?}\nTerm: {}\nLog length: {}\nCommit index: {}\nLast applied: {}\nLog: {}",
-        raft.role(),
-        raft.current_term(),
-        raft.log_len(),
-        raft.commit_index(),
-        raft.last_applied(),
-        raft.log_debug()
-    )
 }
 
 async fn find_current_leader() -> String {
