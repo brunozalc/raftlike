@@ -3,6 +3,14 @@ name = "raftlike"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "raftlike"
+path = "src/main.rs"
+
+[[bin]]
+name = "cli"
+path = "src/bin/cli.rs"
+
 [dependencies]
 axum = "0.8.6"
 clap = {version = "4.5.49", features = ["derive"]}
