@@ -4,6 +4,8 @@
 
 A mini implementation of the Raft consensus algorithm in Rust. This project provides a multi-node cluster and a command-line interface (CLI) to demonstrate leader election, log replication, and fault tolerance.
 
+Read the design document [here](https://github.com/brunozalc/raftlike/blob/main/design.pdf).
+
 ## Prerequisites
 
 Before you begin, ensure you have the following installed:
