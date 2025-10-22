@@ -123,12 +123,12 @@ A final status check will show that the cluster is fully healthy again.
 Here is a summary of all available `cli` commands:
 
 | Command             | Description                                                 |
-| ------------------- | ----------------------------------------------------------- | --- | --------------------------------- |
+| ------------------- | ----------------------------------------------------------- |
 | `status`            | Shows the detailed status of each node in the cluster.      |
 | `put <KEY> <VALUE>` | Stores a key-value pair in the distributed key-value store. |
 | `get <KEY>`         | Retrieves the value for a given key.                        |
-| `kill <A            | B                                                           | C>` | Kills the specified node process. |
-| `restart <A         | B                                                           | C>` | Restarts the specified node.      |
+| `kill <NODE>`       | Kills the specified node process (A, B, or C).              |
+| `restart <NODE>`    | Restarts the specified node (A, B, or C).                   |
 
 ## Cluster Management (`make`)
 
