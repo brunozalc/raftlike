@@ -2,9 +2,7 @@
 <img src="assets/logo.png" alt="raftlike logo" width="400"/>
 </div>
 
-# Raftlike
-
-A simple implementation of the Raft consensus algorithm in Rust. This project provides a multi-node cluster and a command-line interface (CLI) to demonstrate leader election, log replication, and fault tolerance.
+A mini implementation of the Raft consensus algorithm in Rust. This project provides a multi-node cluster and a command-line interface (CLI) to demonstrate leader election, log replication, and fault tolerance.
 
 ## Prerequisites
 
