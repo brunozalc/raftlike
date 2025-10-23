@@ -43,15 +43,16 @@
 
 This project implements a simplified Raft consensus algorithm in Rust, featuring automatic leader election, log replication, and crash recovery across a 3-node cluster.
 
-*Core Components:*
-- HTTP API server (Axum framework)
-- Asynchronous event loop (Tokio runtime)
-- Persistent state storage (JSON files)
-- Command-line interface
+The algorithm is used by a few real-world applications and databases such as Kubernetes (etcd), TiDB
+
+The architecture consists of a few core components:
+
+- HTTP API server (Axum)
+- Asynchronous event loop (Tokio)
+- Persistent state storage using JSON files
+- Command-line interface for interacting with the nodes
 
 == Concurrent Task Architecture
-
-The system spawns three async tasks at startup that run concurrently:
 
 #figure(
   image("assets/logic-new.png", width: 70%),
@@ -61,13 +62,14 @@ The system spawns three async tasks at startup that run concurrently:
   ]
 ) <fig-architecture>
 
-As shown in @fig-architecture, the three tasks are:
+The system spawns three async tasks at startup that run concurrently. As shown in
+@fig-architecture, the three tasks are:
 
-+ *Election Timeout Task* - Monitors for leader failures and initiates elections through RPC
++ *Election Timeout Task* - Followers monitor for leader failures and initiate elections through RPC
 + *Heartbeat Task* - When leader, sends periodic append entries to followers through RPC
 + *HTTP Handler Task* - Accepts and processes client requests
 
-All tasks share access to the `RaftNode` state through `Arc<Mutex<>>`, ensuring thread-safe coordination.
+All tasks share access to the `RaftNode` state through `Arc<Mutex<>>`, which ensures that the operations are thread-safe.
 
 == Election Timeout Mechanism
 
@@ -92,14 +94,17 @@ A node grants its vote if *all* conditions are satisfied:
 + Node hasn't voted for another candidate this term
 + Candidate's log is at least as up-to-date
 
-*Log up-to-date comparison:*
+Log info can also help the system choose new leaders in case of ties or network partitions:
+
 - If last log terms differ → higher term wins
 - If terms equal → longer log wins
 
 == Term Management
 
-Terms act as logical clocks. When a node observes a higher term:
-- Immediately steps down to follower
+Terms act as logical clocks and control the system's timeline. Usually, a term is incremented (and an election started) due to network partitions or leader failures.
+
+When a node observes a higher term:
+- Immediately steps down to follower (if leader or candidate)
 - Updates to new term
 - Clears its vote
 
@@ -113,19 +118,13 @@ Log replication is one of Raft's core mechanisms and is of utmost importance.
 
 The leader replicates log entries by sending `AppendEntries` RPCs every 100ms (heartbeat interval).
 
-*Request includes:*
-- Leader's current term
-- Previous log index and term (for consistency)
-- New entries to append
-- Leader's commit index
+This request includes the leader's current term, the previous log entry's index and term (for consistency checks), and new log entries.
 
 *Consistency check:* Follower rejects if `prev_log_index` doesn't match locally.
 
 == Commit Protocol
 
-The leader commits an entry when:
-+ A majority of nodes have replicated it
-+ The entry is from the current term
+The leader commits an entry when it is safe to assume that the majority of nodes have replicated it.
 
 #box[
 ```rust
@@ -153,49 +152,49 @@ Three pieces of state survive crashes:
   [`log`], [Source of truth for all data],
 )
 
+This is enough to recover from failures.
+
 == Storage Format
 
-State is serialized to JSON and written to `./states/raft_state_<id>.json` after every modification:
-- Term changes (elections)
-- Vote grants
-- Log appends
+The node state is serialized to JSON and written to `./states/raft_state_<id>.json` after every modification, such as term changes (elections), vote grants or log appends.
 
 == Recovery Process
 
-On startup:
-+ Load persistent state from disk
-+ Initialize as follower in last known term
-+ Wait for leader heartbeat or timeout
+On startup (either at start or when recovering from a failure), the node loads its state from the `.json` file and initializes itself as a follower in the last known term.
 
 = Failure Handling
 
-== Leader Failure
+Detecting failures accordingly is important to ensure the system's reliability and availability.
 
-*Detection:* Followers detect via missed heartbeats (>400ms).
+== Leader Crashes
 
-*Recovery:*
-+ Election timeout expires
-+ Follower becomes candidate
-+ New leader elected within ~500ms
+Followers detect via missed heartbeats (>400ms).
 
-*Data safety:* Log entries committed on majority survive leader crashes.
+In case a leader is not detected, the follower nodes will start an election when the correspondent timeout expires. That means a new leader will be chosen within ~500ms.
+
+The log entries committed on majority survive any leader crashes.
 
 == Split Votes
 
-If two candidates start elections simultaneously:
-- Both may fail to achieve majority
-- Election timeout fires again with *different* random delays
-- System eventually converges (typically within 2-3 attempts)
+Two candidates might start elections at the same time. In that case, both might not receive a majority of votes. The election timeout will fire again, but with a different random delay, and the system will eventually converge (within 2-3 rounds)
 
-== Network Partitions
+= Limitations and Future Improvements
 
-*Scenario:* Cluster splits into [Leader, A] and [B, C]
+The Raft consensus algorithm is not perfect and has natural limitations. In the context of the CAP theory, it is a CP system (consistent and partition-tolerant).
 
-The minority partition (Leader, A) cannot commit new entries (no majority). The majority partition (B, C) elects a new leader and continues operating.
+*Consistency (✓):* All committed log entries are replicated to a majority before being considered committed. No node can have conflicting committed data.
 
-When partition heals, the old leader sees higher term and steps down.
+*Partition tolerance (✓):* During network partitions, the majority partition elects a new leader and continues operating. The minority partition safely halts write operations.
 
-= Future Improvements
+*Availability (✗):* The system becomes unavailable in two scenarios:
++ During leader elections (\~300-500ms window)
++ For minority partitions (cannot achieve quorum)
+
+The algorithm also has a problem with throughput. Raft runs on a single-leader model, which means it centralizes all operations (writes, reads and replication), creating a performance bottleneck.
+
+Not only that, but scaling such a system is also hard, given that the leader workload grows with the total number of nodes.
+
+== Future Improvements
 
 + Snapshot/compaction for log growth
 + Batched log replication for throughput
