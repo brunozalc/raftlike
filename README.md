@@ -2,6 +2,12 @@
 <img src="assets/logo.png" alt="raftlike logo" width="400"/>
 </div>
 
+[![Rust](https://img.shields.io/badge/rust-1.90.0-orange.svg)](https://www.rust-lang.org/)
+
+[![GitHub last commit](https://img.shields.io/github/last-commit/brunozalc/raftlike)](https://github.com/brunozalc/raftlike)
+[![GitHub code size](https://img.shields.io/github/languages/code-size/brunozalc/raftlike)](https://github.com/brunozalc/raftlike)
+[![Lines of Code](https://tokei.rs/b1/github/brunozalc/raftlike)](https://github.com/brunozalc/raftlike)
+
 A mini implementation of the Raft consensus algorithm in Rust. This project provides a multi-node cluster and a command-line interface (CLI) to demonstrate leader election, log replication, and fault tolerance.
 
 Read the design document [here](https://github.com/brunozalc/raftlike/blob/main/design.pdf).
